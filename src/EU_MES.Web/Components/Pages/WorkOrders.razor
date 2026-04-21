@@ -1,0 +1,166 @@
+@page "/workorders"
+@rendermode InteractiveServer
+@inject IHttpClientFactory HttpClientFactory
+@using System.Net.Http.Json
+
+<PageTitle>Výrobní příkazy - EU MES</PageTitle>
+
+<h1 class="mb-4">📋 Výrobní příkazy</h1>
+
+<button class="btn btn-primary mb-3" @onclick="() => showCreateForm = !showCreateForm">
+    @(showCreateForm ? "Zrušit" : "+ Nový příkaz")
+</button>
+
+@if (showCreateForm)
+{
+    <div class="card mb-4 border-primary">
+        <div class="card-header bg-primary text-white">Nový výrobní příkaz</div>
+        <div class="card-body">
+            <div class="row g-2">
+                <div class="col-md-3"><input class="form-control" placeholder="Číslo VP" @bind="newOrder.OrderNumber" /></div>
+                <div class="col-md-3"><input class="form-control" placeholder="Kód produktu" @bind="newOrder.ProductCode" /></div>
+                <div class="col-md-3"><input class="form-control" placeholder="Název produktu" @bind="newOrder.ProductName" /></div>
+                <div class="col-md-3"><input class="form-control" type="number" placeholder="Plán. množství" @bind="newOrder.PlannedQuantity" /></div>
+                <div class="col-md-3">
+                    <select class="form-select" @bind="newOrder.Priority">
+                        <option value="Normal">Normal</option>
+                        <option value="Low">Low</option>
+                        <option value="High">High</option>
+                        <option value="Urgent">Urgent</option>
+                    </select>
+                </div>
+                <div class="col-md-3"><input class="form-control" type="datetime-local" @bind="newOrder.PlannedStartDate" /></div>
+                <div class="col-md-3"><input class="form-control" type="datetime-local" @bind="newOrder.PlannedEndDate" /></div>
+            </div>
+            <button class="btn btn-success mt-2" @onclick="CreateWorkOrder">Vytvořit</button>
+        </div>
+    </div>
+}
+
+@if (workOrders is null)
+{
+    <div class="spinner-border text-primary"></div>
+}
+else
+{
+    <table class="table table-striped table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>Číslo VP</th>
+                <th>Produkt</th>
+                <th>Plán. množství</th>
+                <th>Vyrobeno</th>
+                <th>Priorita</th>
+                <th>Stav</th>
+                <th>Plán. start</th>
+                <th>Akce</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var wo in workOrders)
+            {
+                <tr>
+                    <td><strong>@wo.OrderNumber</strong></td>
+                    <td>@wo.ProductCode - @wo.ProductName</td>
+                    <td>@wo.PlannedQuantity</td>
+                    <td>@wo.ProducedQuantity</td>
+                    <td><span class="badge @GetPriorityBadge(wo.Priority)">@wo.Priority</span></td>
+                    <td><span class="badge @GetStatusBadge(wo.Status)">@wo.Status</span></td>
+                    <td>@wo.PlannedStartDate.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                    <td>
+                        @if (wo.Status == "Created" || wo.Status == "Released")
+                        {
+                            <button class="btn btn-sm btn-success" @onclick="() => StartWorkOrder(wo.Id)">Start</button>
+                        }
+                        @if (wo.Status == "InProgress")
+                        {
+                            <button class="btn btn-sm btn-secondary ms-1" @onclick="() => CompleteWorkOrder(wo.Id)">Dokončit</button>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (errorMessage is not null)
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+
+@code {
+    private List<WorkOrderItem>? workOrders;
+    private bool showCreateForm = false;
+    private string? errorMessage;
+    private CreateOrderModel newOrder = new();
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        try
+        {
+            var client = HttpClientFactory.CreateClient("MesApi");
+            workOrders = await client.GetFromJsonAsync<List<WorkOrderItem>>("api/workorders") ?? new();
+        }
+        catch (Exception ex) { errorMessage = ex.Message; }
+    }
+
+    private async Task StartWorkOrder(Guid id)
+    {
+        var client = HttpClientFactory.CreateClient("MesApi");
+        await client.PostAsync($"api/workorders/{id}/start", null);
+        await LoadData();
+    }
+
+    private async Task CompleteWorkOrder(Guid id)
+    {
+        var client = HttpClientFactory.CreateClient("MesApi");
+        await client.PostAsync($"api/workorders/{id}/complete", null);
+        await LoadData();
+    }
+
+    private async Task CreateWorkOrder()
+    {
+        try
+        {
+            var client = HttpClientFactory.CreateClient("MesApi");
+            var response = await client.PostAsJsonAsync("api/workorders", newOrder);
+            if (response.IsSuccessStatusCode) { showCreateForm = false; newOrder = new(); await LoadData(); }
+            else errorMessage = await response.Content.ReadAsStringAsync();
+        }
+        catch (Exception ex) { errorMessage = ex.Message; }
+    }
+
+    private string GetStatusBadge(string status) => status switch
+    {
+        "InProgress" => "bg-warning text-dark",
+        "Completed" => "bg-success",
+        "Cancelled" => "bg-secondary",
+        "Released" => "bg-info text-dark",
+        _ => "bg-light text-dark"
+    };
+
+    private string GetPriorityBadge(string priority) => priority switch
+    {
+        "Urgent" => "bg-danger",
+        "High" => "bg-warning text-dark",
+        "Normal" => "bg-primary",
+        _ => "bg-secondary"
+    };
+
+    class CreateOrderModel
+    {
+        public string OrderNumber { get; set; } = "";
+        public string ProductCode { get; set; } = "";
+        public string ProductName { get; set; } = "";
+        public decimal PlannedQuantity { get; set; } = 100;
+        public string Priority { get; set; } = "Normal";
+        public DateTime PlannedStartDate { get; set; } = DateTime.Now;
+        public DateTime PlannedEndDate { get; set; } = DateTime.Now.AddDays(7);
+    }
+
+    record WorkOrderItem(Guid Id, string OrderNumber, string ProductCode, string ProductName,
+        decimal PlannedQuantity, decimal ProducedQuantity, decimal ScrapQuantity,
+        string Status, string Priority, DateTime PlannedStartDate, DateTime PlannedEndDate);
+}

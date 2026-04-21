@@ -1,0 +1,118 @@
+@page "/reports"
+@rendermode InteractiveServer
+@inject IHttpClientFactory HttpClientFactory
+@using System.Net.Http.Json
+
+<PageTitle>Reporty OEE - EU MES</PageTitle>
+
+<h1 class="mb-4">📈 Reporty & OEE</h1>
+
+<div class="card mb-4">
+    <div class="card-header">OEE kalkulátor</div>
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">Stroj</label>
+                <select class="form-select" @bind="selectedMachineId">
+                    <option value="">-- Vyberte stroj --</option>
+                    @foreach (var m in machines)
+                    {
+                        <option value="@m.Id">@m.Code - @m.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Od</label>
+                <input class="form-control" type="date" @bind="fromDate" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Do</label>
+                <input class="form-control" type="date" @bind="toDate" />
+            </div>
+            <div class="col-md-3">
+                <button class="btn btn-primary w-100" @onclick="LoadOEE">Vypočítat OEE</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (oeeReport is not null)
+{
+    <div class="card">
+        <div class="card-header bg-info text-white">OEE Report: @oeeReport.MachineName (@oeeReport.From.ToString("dd.MM.yyyy") - @oeeReport.To.ToString("dd.MM.yyyy"))</div>
+        <div class="card-body">
+            <div class="row text-center g-3">
+                <div class="col-md-3">
+                    <div class="card border-success">
+                        <div class="card-body">
+                            <h2 class="text-success">@oeeReport.Availability.ToString("P1")</h2>
+                            <p>Dostupnost (A)</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-warning">
+                        <div class="card-body">
+                            <h2 class="text-warning">@oeeReport.Performance.ToString("P1")</h2>
+                            <p>Výkon (P)</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-primary">
+                        <div class="card-body">
+                            <h2 class="text-primary">@oeeReport.Quality.ToString("P1")</h2>
+                            <p>Kvalita (Q)</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-danger @(oeeReport.OEE >= 0.85 ? "border-success" : "border-danger")">
+                        <div class="card-body">
+                            <h2 class="@(oeeReport.OEE >= 0.85 ? "text-success" : "text-danger")">@oeeReport.OEE.ToString("P1")</h2>
+                            <p>OEE celkem</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <table class="table table-bordered mt-3">
+                <tbody>
+                    <tr><th>Plánovaný čas (min)</th><td>@oeeReport.PlannedTimeMinutes.ToString("F0")</td></tr>
+                    <tr><th>Prostoj (min)</th><td>@oeeReport.DowntimeMinutes.ToString("F0")</td></tr>
+                    <tr><th>Celkem vyrobeno</th><td>@oeeReport.TotalProduced ks</td></tr>
+                    <tr><th>Dobrých kusů</th><td>@oeeReport.TotalGood ks</td></tr>
+                    <tr><th>Zmetků</th><td>@oeeReport.TotalScrap ks</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private List<MachineItem> machines = new();
+    private string? selectedMachineId;
+    private DateTime fromDate = DateTime.Today.AddDays(-30);
+    private DateTime toDate = DateTime.Today;
+    private OEEReport? oeeReport;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var client = HttpClientFactory.CreateClient("MesApi");
+        machines = await client.GetFromJsonAsync<List<MachineItem>>("api/machines") ?? new();
+    }
+
+    private async Task LoadOEE()
+    {
+        if (string.IsNullOrEmpty(selectedMachineId)) return;
+        var client = HttpClientFactory.CreateClient("MesApi");
+        var url = $"api/oee?machineId={selectedMachineId}&from={fromDate:yyyy-MM-dd}&to={toDate:yyyy-MM-dd}";
+        oeeReport = await client.GetFromJsonAsync<OEEReport>(url);
+    }
+
+    record MachineItem(Guid Id, string Code, string Name);
+    record OEEReport(Guid MachineId, string MachineCode, string MachineName,
+        DateTime From, DateTime To, double PlannedTimeMinutes, double DowntimeMinutes,
+        double Availability, double Performance, double Quality, double OEE,
+        int TotalProduced, int TotalGood, int TotalScrap);
+}

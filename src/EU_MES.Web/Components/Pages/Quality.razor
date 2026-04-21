@@ -1,0 +1,119 @@
+@page "/quality"
+@rendermode InteractiveServer
+@inject IHttpClientFactory HttpClientFactory
+@using System.Net.Http.Json
+
+<PageTitle>Kvalita - EU MES</PageTitle>
+
+<h1 class="mb-4">🔍 Správa kvality</h1>
+
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <button class="nav-link @(activeTab == "nc" ? "active" : "")" @onclick='() => activeTab = "nc"'>
+            Neshody (NC)
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link @(activeTab == "checks" ? "active" : "")" @onclick='() => activeTab = "checks"'>
+            Kontroly kvality
+        </button>
+    </li>
+</ul>
+
+@if (activeTab == "nc")
+{
+    <h4>Neshody (Non-Conformance)</h4>
+    @if (ncs is null) { <div class="spinner-border"></div> }
+    else
+    {
+        <table class="table table-striped">
+            <thead class="table-dark">
+                <tr><th>Číslo NC</th><th>Typ</th><th>Závažnost</th><th>Popis</th><th>Stav</th><th>Detekováno</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var nc in ncs)
+                {
+                    <tr class="@GetNCSeverityRow(nc.Severity)">
+                        <td><strong>@nc.NCNumber</strong></td>
+                        <td>@nc.Type</td>
+                        <td><span class="badge @GetSeverityBadge(nc.Severity)">@nc.Severity</span></td>
+                        <td>@nc.Description</td>
+                        <td><span class="badge @GetNCStatusBadge(nc.Status)">@nc.Status</span></td>
+                        <td>@nc.DetectedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+else
+{
+    <h4>Kontroly kvality</h4>
+    @if (checks is null) { <div class="spinner-border"></div> }
+    else
+    {
+        <table class="table table-striped">
+            <thead class="table-dark">
+                <tr><th>Název kontroly</th><th>Typ</th><th>Výsledek</th><th>Naměřená hodnota</th><th>Min/Max</th><th>Datum</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var qc in checks)
+                {
+                    <tr>
+                        <td>@qc.CheckName</td>
+                        <td>@qc.CheckType</td>
+                        <td><span class="badge @GetResultBadge(qc.Result)">@qc.Result</span></td>
+                        <td>@(qc.MeasuredValue?.ToString("F3") ?? "-")</td>
+                        <td>@(qc.MinValue?.ToString("F3") ?? "-") / @(qc.MaxValue?.ToString("F3") ?? "-")</td>
+                        <td>@qc.CheckedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private string activeTab = "nc";
+    private List<NCItem>? ncs;
+    private List<QCItem>? checks;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var client = HttpClientFactory.CreateClient("MesApi");
+        ncs = await client.GetFromJsonAsync<List<NCItem>>("api/quality/nc") ?? new();
+        checks = await client.GetFromJsonAsync<List<QCItem>>("api/quality/checks") ?? new();
+    }
+
+    private string GetNCSeverityRow(string severity) => severity switch
+    {
+        "Critical" => "table-danger",
+        "Major" => "table-warning",
+        _ => ""
+    };
+
+    private string GetSeverityBadge(string severity) => severity switch
+    {
+        "Critical" => "bg-danger",
+        "Major" => "bg-warning text-dark",
+        _ => "bg-info text-dark"
+    };
+
+    private string GetNCStatusBadge(string status) => status switch
+    {
+        "Closed" => "bg-success",
+        "Open" => "bg-danger",
+        "UnderReview" => "bg-warning text-dark",
+        _ => "bg-secondary"
+    };
+
+    private string GetResultBadge(string result) => result switch
+    {
+        "Pass" => "bg-success",
+        "Fail" => "bg-danger",
+        _ => "bg-secondary"
+    };
+
+    record NCItem(Guid Id, string NCNumber, string Type, string Severity, string Description, string Status, DateTime DetectedAt);
+    record QCItem(Guid Id, Guid WorkOrderId, string CheckName, string CheckType, string Result, decimal? MeasuredValue, decimal? MinValue, decimal? MaxValue, DateTime CheckedAt);
+}

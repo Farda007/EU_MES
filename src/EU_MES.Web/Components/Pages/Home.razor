@@ -1,0 +1,103 @@
+@page "/"
+@rendermode InteractiveServer
+@inject IHttpClientFactory HttpClientFactory
+@using System.Net.Http.Json
+
+<PageTitle>Dashboard - EU MES</PageTitle>
+
+<h1 class="mb-4">📊 Dashboard</h1>
+
+@if (summary is null)
+{
+    <div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"></div></div>
+}
+else
+{
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card border-primary text-center p-3">
+                <div class="card-body">
+                    <h2 class="text-primary">@summary.ActiveWorkOrders</h2>
+                    <p class="card-text">Aktivní VP</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-success text-center p-3">
+                <div class="card-body">
+                    <h2 class="text-success">@summary.RunningMachines / @summary.TotalMachines</h2>
+                    <p class="card-text">Běžící stroje</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-info text-center p-3">
+                <div class="card-body">
+                    <h2 class="text-info">@(summary.OverallOEE.ToString("P1"))</h2>
+                    <p class="card-text">Celkové OEE</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-danger text-center p-3">
+                <div class="card-body">
+                    <h2 class="text-danger">@summary.OpenNonConformances</h2>
+                    <p class="card-text">Otevřené NC (@summary.CriticalNCs kritické)</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-primary text-white">Výrobní příkazy</div>
+                <div class="card-body">
+                    <p>Celkem: <strong>@summary.TotalWorkOrders</strong></p>
+                    <p>Aktivní: <strong class="text-warning">@summary.ActiveWorkOrders</strong></p>
+                    <p>Dokončené: <strong class="text-success">@summary.CompletedWorkOrders</strong></p>
+                    <p>Dnešní produkce: <strong>@summary.TodayProduction ks</strong></p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-danger text-white">Poruchy strojů</div>
+                <div class="card-body">
+                    <p>Stroje v poruše: <strong class="text-danger">@summary.MachinesInBreakdown</strong></p>
+                    <p>Kritické NC: <strong class="text-danger">@summary.CriticalNCs</strong></p>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (errorMessage is not null)
+{
+    <div class="alert alert-warning mt-3">@errorMessage</div>
+}
+
+@code {
+    private DashboardSummary? summary;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var client = HttpClientFactory.CreateClient("MesApi");
+            summary = await client.GetFromJsonAsync<DashboardSummary>("api/dashboard/summary");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Nelze načíst data z API: {ex.Message}";
+            summary = new DashboardSummary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        }
+    }
+
+    record DashboardSummary(
+        int TotalWorkOrders, int ActiveWorkOrders, int CompletedWorkOrders,
+        int TotalMachines, int RunningMachines, int MachinesInBreakdown,
+        int OpenNonConformances, int CriticalNCs,
+        double OverallOEE, int TodayProduction);
+}

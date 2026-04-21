@@ -1,0 +1,20 @@
+## .NET gitignore
+*.user
+*.suo
+.vs/
+bin/
+obj/
+*.db
+*.db-shm
+*.db-wal
+*.log
+*.nupkg
+*.snupkg
+publish/
+.publish/
+TestResults/
+[Tt]emp/
+.env
+*.secrets.json
+!appsettings.json
+!appsettings.*.json

@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EU_MES.API/EU_MES.API.csproj" />
+    <Project Path="src/EU_MES.Application/EU_MES.Application.csproj" />
+    <Project Path="src/EU_MES.Domain/EU_MES.Domain.csproj" />
+    <Project Path="src/EU_MES.Infrastructure/EU_MES.Infrastructure.csproj" />
+    <Project Path="src/EU_MES.Web/EU_MES.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EU_MES.Application.Tests/EU_MES.Application.Tests.csproj" />
+    <Project Path="tests/EU_MES.Domain.Tests/EU_MES.Domain.Tests.csproj" />
+  </Folder>
+</Solution>

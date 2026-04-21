@@ -1,0 +1,99 @@
+@page "/shopfloor"
+@rendermode InteractiveServer
+@inject IHttpClientFactory HttpClientFactory
+@using System.Net.Http.Json
+
+<PageTitle>Shop Floor - EU MES</PageTitle>
+
+<h1 class="mb-4">🏭 Shop Floor - Stav strojů</h1>
+
+@if (machines is null)
+{
+    <div class="spinner-border text-primary"></div>
+}
+else
+{
+    <div class="row g-3">
+        @foreach (var machine in machines)
+        {
+            <div class="col-md-4">
+                <div class="card h-100 border-@GetMachineBorderColor(machine.Status)">
+                    <div class="card-header bg-@GetMachineHeaderColor(machine.Status) text-white">
+                        <strong>@machine.Code</strong> - @machine.Name
+                        <span class="float-end badge bg-light text-dark">@machine.Status</span>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-1"><small class="text-muted">Pracoviště:</small> @machine.WorkCenter</p>
+                        <p class="mb-1">
+                            <small class="text-muted">Stav:</small>
+                            <span class="badge bg-@GetMachineHeaderColor(machine.Status)">@machine.Status</span>
+                        </p>
+                        <div class="mt-2">
+                            <small class="text-muted">Změnit stav:</small>
+                            <div class="btn-group btn-group-sm mt-1 d-flex flex-wrap gap-1">
+                                @{ var mid = machine.Id; }
+                                <button class="btn btn-success btn-sm" @onclick="@(() => SetMachineStatus(mid, "Running"))">Spustit</button>
+                                <button class="btn btn-secondary btn-sm" @onclick="@(() => SetMachineStatus(mid, "Stopped"))">Stop</button>
+                                <button class="btn btn-warning btn-sm" @onclick="@(() => SetMachineStatus(mid, "Maintenance"))">Údržba</button>
+                                <button class="btn btn-danger btn-sm" @onclick="@(() => SetMachineStatus(mid, "Breakdown"))">Porucha</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@if (errorMessage is not null)
+{
+    <div class="alert alert-danger mt-3">@errorMessage</div>
+}
+
+@code {
+    private List<MachineItem>? machines;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        try
+        {
+            var client = HttpClientFactory.CreateClient("MesApi");
+            machines = await client.GetFromJsonAsync<List<MachineItem>>("api/machines") ?? new();
+        }
+        catch (Exception ex) { errorMessage = ex.Message; }
+    }
+
+    private async Task SetMachineStatus(Guid id, string status)
+    {
+        try
+        {
+            var client = HttpClientFactory.CreateClient("MesApi");
+            await client.PatchAsJsonAsync($"api/machines/{id}/status", new { Status = status });
+            await LoadData();
+        }
+        catch (Exception ex) { errorMessage = ex.Message; }
+    }
+
+    private string GetMachineBorderColor(string status) => status switch
+    {
+        "Running" => "success",
+        "Breakdown" => "danger",
+        "Maintenance" => "warning",
+        "Stopped" => "secondary",
+        _ => "primary"
+    };
+
+    private string GetMachineHeaderColor(string status) => status switch
+    {
+        "Running" => "success",
+        "Breakdown" => "danger",
+        "Maintenance" => "warning",
+        "Stopped" => "secondary",
+        _ => "primary"
+    };
+
+    record MachineItem(Guid Id, string Code, string Name, string Description, string WorkCenter, string Status, bool IsActive);
+}
